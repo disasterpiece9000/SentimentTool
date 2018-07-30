@@ -61,29 +61,35 @@ def readFiles():
 			userDB.remove(find_stuff['username'] == user['username'])
 		else:
 			userObj = setUser(user['username'])
-			current_users.append(userObj)
+			#check if user is valid
+			if userObj != None:
+				current_users.append(userObj)
 	print ('Read all current users')
 	
 	for username in whitelistDB:
-		whitelist.append(username)
+		user = setUser(username['username'])
+		if user == None:
+			addWhitelist(username['username'])
+		else:
+			whitelist.append(user)
 	print ('All users read from whitelist')
 
 #scrape main sub for users not in current_users and not already in expired_users
 def findExpiredUsers():
 	global current_users, expired_users
 	print ('Scraping comments')
-	for comment in cc_sub.comments(limit = None):
+	for comment in cc_sub.comments(limit = 300):
 		user = comment.author
 		username = str(user)
-		if user not in current_users and user not in expired_users and user not in whitelist:
+		if user not in current_users and user not in expired_users and user not in whitelist and checkUser(user) == True:
 			expired_users.append(user)
 			print ('\tNew user added to expired list: ' + username)
 
 	print ('Scraping submissions')
-	for post in cc_sub.new(limit = None):
+	for post in cc_sub.new(limit = 100):
 		user = post.author
 		username = str(user)
-		if user not in current_users and user not in expired_users and user not in whitelist:
+		if user not in current_users and user not in expired_users and user not in whitelist and checkUser(user) == True:
 			expired_users.append(user)
 			print ('\tNew user added to expired list: ' + username)
 
@@ -95,63 +101,56 @@ def analyzeUserHist(users):
 	subList = makeSubList(relevantSubs)
 
 	for user in users:
-		try:
-			sub_counter = Counter()
-			username = str(user)
-			if user == None:
-				print ('\tUser returned None: ' + username)
-				continue
-				
-			userSent = 0.0
-			count = 0
-			countNeg = 0
-			countPos = 0
-			totalNeg = 0.0
-			totalPos = 0.0
-			comments = user.comments.new(limit = None)
-
-			for comment in comments:
-				if comment.subreddit in subList:
-					commentSent = analyzeText(comment.body)
-					count += 1
-					if commentSent < -0.5:
-						countNeg += 1
-						totalNeg += commentSent
-					elif commentSent > 0.6:
-						countPos += 1
-						totalPos += commentSent
-					#Count comment's karma in sub
-					sub_counter[str(comment.subreddit)] += comment.score
-			
-			#analyze sentiment statistics
-			sentFalir(user, count, countPos, countNeg, totalNeg, totalPos)
+		username = str(user)
+		#Setup float and int numbers for sentiment analysis
+		sub_counter = Counter()
+		userSent = 0.0
+		count = 0
+		countNeg = 0
+		countPos = 0
+		totalNeg = 0.0
+		totalPos = 0.0
 		
-			#Count post's karma in sub
-			posts = user.submissions.new(limit = 300)
-			for post in posts:
-				if post.subreddit in subList:
-					sub_counter[str(post.subreddit)] += post.score
+		#Analyze a users comments
+		comments = user.comments.new(limit = None)
+		for comment in comments:
+			if comment.subreddit in subList:
+				commentSent = analyzeText(comment.body)
+				count += 1
+				if commentSent < -0.5:
+					countNeg += 1
+					totalNeg += commentSent
+				elif commentSent > 0.6:
+					countPos += 1
+					totalPos += commentSent
+				#Count comment's karma in sub
+				sub_counter[str(comment.subreddit)] += comment.score
 			
-			#Add flair for sub karma > 1k	
-			for key, value in sub_counter.most_common(2):
-				if value > 1000:
-					flairText = key + ': ' + str(value) + ' karma'
-					appendFlair(user, flairText)
-			#Add flair for sub karma < -10
-			for key, value in sub_counter.most_common():
-				if value < -10:
-					flairText = key + ': ' + str(value) + ' karma'
-					appendFlair(user, flairText)
-		except (prawcore.exceptions.NotFound):
-			continue
+		#analyze sentiment statistics
+		sentFalir(user, count, countPos, countNeg, totalNeg, totalPos)
+		
+		#Count post's karma in sub
+		posts = user.submissions.new(limit = None)
+		for post in posts:
+			if post.subreddit in subList:
+				sub_counter[str(post.subreddit)] += post.score
+		
+		#Add flair for sub karma > 1k	
+		for key, value in sub_counter.most_common(2):
+			if value > 1000:
+				flairText = key + ': ' + str(value) + ' karma'
+				appendFlair(user, flairText)
+		#Add flair for sub karma < -10
+		for key, value in sub_counter.most_common():
+			if value < -10:
+				flairText = key + ': ' + str(value) + ' karma'
+				appendFlair(user, flairText)
 
 #get data from sources other than comments and posts
 def analyzeUserStats(users):
 	for user in users:
 		username = str(user)
-		if user == None:
-			print ('\tUser returned None')
-			continue
+
 		#flair new accounts
 		userCreated = datetime.fromtimestamp(user.created)
 		now = datetime.now()
@@ -272,13 +271,20 @@ def makeSubList(subList):
 		returnList.append(reddit.subreddit(sub))
 	return returnList
 
-#turn username into user object
+#turn username into user object and check if user exists
 def setUser(username):
 	try:
-		user = reddit.redditor(username)
+		return reddit.redditor(username)
 	except (prawcore.exceptions.NotFound, AttributeError):
 		return None
-	return user
+
+#check if user object is accessible
+def checkUser(user):
+	try:
+		user.fullname
+	except prawcore.exceptions.NotFound:
+		return False
+	return True
 
 #main method
 command = sys.argv[1]
