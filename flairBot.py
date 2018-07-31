@@ -20,7 +20,6 @@ sid = SentimentIntensityAnalyzer()
 
 #lists of users for filters
 current_users = []
-expired_users = []
 users_and_flair = {}
 whitelist = []
 
@@ -72,7 +71,6 @@ def readFiles():
 	#update globals
 	current_time = datetime.now()
 	current_users.clear()
-	expired_users.clear()
 	users_and_flair.clear()
 	whitelist.clear()
 	
@@ -97,7 +95,8 @@ def readFiles():
 
 #scrape main sub for users not in current_users and not already in expired_users
 def findExpiredUsers(cmnt_limit, post_limit):
-	global current_users, expired_users
+	global current_users
+	expired_users = []
 	print ('Scraping comments')
 	for comment in cc_sub.comments(limit = cmnt_limit):
 		user = comment.author
@@ -113,108 +112,159 @@ def findExpiredUsers(cmnt_limit, post_limit):
 		if user not in current_users and user not in expired_users and user not in whitelist and checkUser(user) == True:
 			expired_users.append(user)
 			print ('\tNew user added to expired list: ' + username)
+	return expired_users
 
-#sentiment analysis of expired_users
-def analyzeUserHist(users):
-	global users_and_flair, relevantSubs
+#main method for account analysis
+def analyzeUsers(users):
 	print ('Analyzing all users in current list: ' + str(len(users)))
-	userCount = 0
-
 	for user in users:
-		updateDB(user)
-		username = str(user)
-		#Setup float and int numbers for sentiment analysis
-		sub_counter = Counter()
-		userSent = 0.0
-		count = 0
-		countNeg = 0
-		countPos = 0
-		totalNeg = 0.0
-		totalPos = 0.0
-		postCount = 0
-		
-		#Analyze a users comments
-		comments = user.comments.new(limit = None)
-		for comment in comments:
-			cmnt_sub = comment.subreddit
-			sub_name = str(cmnt_sub).upper()
-			if sub_name in sub_abrev:
-				commentSent = analyzeText(comment.body)
-				count += 1
-				if commentSent < -0.5:
-					countNeg += 1
-					totalNeg += commentSent
-				elif commentSent > 0.6:
-					countPos += 1
-					totalPos += commentSent
-				#Count comment's karma in sub
-				abrev = sub_abrev[sub_name]
-				sub_counter[abrev] += comment.score
-		
-		#Count post's karma in sub
-		posts = user.submissions.new(limit = None)
-		for post in posts:
-			post_sub = post.subreddit
-			sub_name = str(post_sub).upper()
-			if sub_name in sub_abrev:
-				postCount += 1
-				abrev = sub_abrev[sub_name]
-				sub_counter[abrev] += post.score
-		
-		#analyze sentiment statistics
-		sentFalir(user, count, postCount, countPos, countNeg, totalNeg, totalPos)
-		
-		#Add flair for sub karma > 1k	
-		for key, value in sub_counter.most_common(2):
-			if value > 500:
-				flairText = key + ': ' + str(value) + ' karma'
-				appendFlair(user, flairText)
-		#Add flair for sub karma < -10
-		for key, value in sub_counter.most_common():
-			if value < -10:
-				flairText = key + ': ' + str(value) + ' karma'
-				appendFlair(user, flairText)
-
-#get data from sources other than comments and posts
-def analyzeUserStats(users):
-	for user in users:
-		username = str(user)
-
-		#flair new accounts
-		userCreated = datetime.fromtimestamp(user.created)
-		now = datetime.now()
-		tdelta = relativedelta.relativedelta(now, userCreated)
-		#create flair with appropriate time breakdown
-		if tdelta.years < 1:
-			if tdelta.months < 1:
-				days = tdelta.days
-				flairText = 'Redditor for ' + str(days)
-				if days == 1:
-					appendFlair(username, flairText + ' day')
-				else:
-					appendFlair(username, flairText + ' days')
-			else:
-				months = tdelta.months
-				flairText = 'Redditor for ' + str(months)
-				if months == 1:
-					appendFlair(user, flairText + ' month')
-				else:
-					appendFlair(user, flairText + ' months')
-		#flair low comment karma
+		#used to implement small version of karma breakdown if necessairy
+		flair_count = 0
+		#scrape user's comments and posts
+		hist_info = analyzeUserHist(user)
+		#hist_info returns karma breakdown by crypto, T/F value for flair assignment, and a count of total posts and submissions
+		karma_stats = hist_info.pop(0)
+		sent_flair = hist_info.pop(0)
+		total_submis = hist_info.pop(0)
+		if sent_flair == True:
+			flair_count += 1
+		#flairs user for account < 1 yr.
+		age_flair = analyzeUserAge(user)
+		if age_flair == True:
+			flair_count += 1
+		#flairs user for karma < 1k
 		if user.comment_karma < 1000:
 			appendFlair(user, str(user.comment_karma) + ' cmnt karma')
+			flair_count += 1
+		#if user has attribute 'New to crypto' then don't add karma breakdown
+		if total_submis > 15:
+			small = False
+			#if there are 2+ flair attributes already then use condensed version
+			if flair_count >= 2:
+				small = True
+			analyzeUserKarma(user, karma_stats, small)
+		else:
+			appendFlair(user, 'New to crypto')
+		updateDB(user, total_submis)
+
+#sentiment analysis of expired_users
+def analyzeUserHist(user):
+	global users_and_flair, relevantSubs
+
+	username = str(user)
+	#Setup float and int numbers for sentiment analysis
+	sub_counter = Counter()
+	userSent = 0.0
+	count = 0
+	countNeg = 0
+	countPos = 0
+	totalNeg = 0.0
+	totalPos = 0.0
+	postCount = 0
+	
+	#Analyze a users comments
+	comments = user.comments.new(limit = None)
+	for comment in comments:
+		cmnt_sub = comment.subreddit
+		sub_name = str(cmnt_sub).upper()
+		if sub_name in sub_abrev:
+			commentSent = analyzeText(comment.body)
+			count += 1
+			if commentSent < -0.5:
+				countNeg += 1
+				totalNeg += commentSent
+			elif commentSent > 0.6:
+				countPos += 1
+				totalPos += commentSent
+			#Count comment's karma in sub
+			abrev = sub_abrev[sub_name]
+			sub_counter[abrev] += comment.score
+	
+	#Count post's karma in sub
+	posts = user.submissions.new(limit = None)
+	for post in posts:
+		post_sub = post.subreddit
+		sub_name = str(post_sub).upper()
+		if sub_name in sub_abrev:
+			postCount += 1
+			abrev = sub_abrev[sub_name]
+			sub_counter[abrev] += post.score
+	
+	#analyze sentiment statistics
+	flaired = sentFlair(user, count, countPos, countNeg, totalNeg, totalPos)
+	
+	totalPost = postCount + count
+	return [sub_counter, flaired, totalPost]
+	
+#flair new accounts
+def analyzeUserAge(user):
+	username = str(user)
+	userCreated = datetime.fromtimestamp(user.created)
+	tdelta = relativedelta.relativedelta(current_time, userCreated)
+	flaired = False
+	#create flair with appropriate time breakdown
+	if tdelta.years < 1:
+		flaired = True
+		if tdelta.months < 1:
+			days = tdelta.days
+			flairText = 'Redditor for ' + str(days)
+			if days == 1:
+				appendFlair(username, flairText + ' day')
+			else:
+				appendFlair(username, flairText + ' days')
+		else:
+			months = tdelta.months
+			flairText = 'Redditor for ' + str(months)
+			if months == 1:
+				appendFlair(user, flairText + ' month')
+			else:
+				appendFlair(user, flairText + ' months')
+	return flaired
+
+def analyzeUserKarma(user, sub_counter, small):
+	parent_sub = 'CM'
+	hold_flair = parent_sub + ': ' + str(sub_counter[parent_sub]) + ' karma'
+	
+	if small == True:
+		neg_flair = False
+		neg_score = 0
+		neg_sub = ''
+		for key, value in sub_counter.most_common():
+			if value < -10 and value < neg_score and key != parent_sub:
+				neg_score = value
+				neg_sub = key
+				neg_flair = True
+		if neg_flair == True:
+			hold_flair += ' ' + neg_sub + ': ' + str(neg_score) + ' karma'
+			appendFlair(user, hold_flair)
+		else:
+			for key, value in sub_counter.most_common(1):
+				if value > 500 and key != parent_sub:
+					hold_flair += ' ' + key + ': ' + str(value) + ' karma'
+			appendFlair(user, hold_flair)
+		
+	else:
+		#Add flair for sub karma > 1k	
+		for key, value in sub_counter.most_common(2):
+			if value > 500 and key != parent_sub:
+				hold_flair += ' ' + key + ': ' + str(value) + ' karma'
+		#Add flair for sub karma < -10
+		for key, value in sub_counter.most_common():
+			if value < -10 and key != parent_sub:
+				hold_flair += ' ' + key + ': ' + str(value) + ' karma'
+		appendFlair(user, hold_flair)
 
 #Calculate Positive/Negative score from passed values
-def sentFalir(user, count, postCount, countPos, countNeg, totalNeg, totalPos):
+def sentFlair(user, count, countPos, countNeg, totalNeg, totalPos):
 	username = str(user)
+	flaired = False
 	#Require at least 15 comments for accurate analysis
 	if count > 15:
 		sentPerc = ((countPos + countNeg) / float(count)) * 100
 		#Require at least 7.5% of comments to show obvious sentiment
 		if sentPerc < 7.5:
 			print ('\t' + username + ': Not enough sentiment ' + str(sentPerc)[:4] + '% Count: ' + str(count))
-			return
-			
+			return flaired
 		posPerc = (countPos/float(countPos + countNeg)) * 100
 		negPerc = (countNeg/float(countPos + countNeg)) * 100
 		diffPerc = posPerc - negPerc
@@ -224,6 +274,7 @@ def sentFalir(user, count, postCount, countPos, countNeg, totalNeg, totalPos):
 			if diffPerc < -20:
 				appendFlair(user, 'Negative')
 				print ('\t' + username + ': Negative ' + str(diffPerc)[:4] + '% Count: ' + str(count) + ' Sent: ' + str(sentPerc)[:4])
+				flaired = True
 			#else:
 				#print ('\t' + username + ': avgNeg: ' + str(avgNeg) + ' diffPerc: ' + str(diffPerc))
 
@@ -231,15 +282,13 @@ def sentFalir(user, count, postCount, countPos, countNeg, totalNeg, totalPos):
 			#If there are 35% more positive comments than negative then flair user as positive
 			if diffPerc > 35:
 				appendFlair(user, 'Positive')
+				flaired = True
 				print ('\t' + username + ': Positive ' + str(diffPerc)[:4] + '% Count: ' + str(count) + ' Sent: ' + str(sentPerc)[:4])
 			#else:
 				#print ('\t' + username + ': avgPos: ' + str(avgPos) + ' diffPerc: ' + str(diffPerc))
 		else:
 			print ('\t' + username + ': Unknown ' + str(diffPerc)[:4] + '% Count: ' + str(count) + ' Sent: ' + str(sentPerc)[:4] + ' CountSent: ' + str(countPos + countNeg))
-	#If user has less than 15 comments then flair user as new to crypto		
-	elif postCount + count < 15:
-		appendFlair(user, 'New to crypto')
-		print ('\t' + username + ': Not enough comments Count: ' + str(count))
+	return flaired
 
 #Search PM's for new messages with the syntax '!whitelist /u/someuser and add someuser to the whitelist
 def readPMs():
@@ -284,10 +333,10 @@ def flairUsers():
 		print (username + ': ' + flair)
 
 #add users to database with flair
-def updateDB(user):
+def updateDB(user, total_submis):
 	username = str(user)
 	flair_time = json_serial(current_time)
-	userDB.insert({'username' : username, 'flair_age' : flair_time})
+	userDB.insert({'username' : username, 'flair_age' : flair_time, 'submis_count': total_submis})
 
 #Add a username to the whitelistDB
 def addWhitelist(username):
@@ -327,7 +376,8 @@ def setUser(username):
 		return reddit.redditor(username)
 	except (prawcore.exceptions.NotFound, AttributeError):
 		return None
-		
+
+#turn list of usernames into user object and don't check if they exist	
 def setAccnts(usernames):
 	return_list = []
 	for username in usernames:
@@ -343,23 +393,31 @@ def checkUser(user):
 	return True
 
 #main method
-mods = setAccnts({'_CapR_', 'turtleflax', 'PrinceKael', 'Christi123321', ' publicmodlogs', 'AutoModerator', 'CryptoMarketsMod', 'davidvanbeveren', 'trailblazerwriting', 'golden_china'})
+#list of mods to accept PMs from
+mods = setAccnts({'_CapR_', 'turtleflax', 'PrinceKael', 'Christi123321', ' publicmodlogs', 'AutoModerator', 'CryptoMarketsMod', 'davidvanbeveren', 'trailblazerwriting', 'golden_china', 'PhantomMod'})
+#get command line arg
 command = sys.argv[1]
 #continuously scrape subreddit and apply flair to new users
 if command == 'auto':
 	while True:
 		readPMs()
 		readFiles()
-		findExpiredUsers(300, 100)
-		analyzeUserHist(expired_users)
-		analyzeUserStats(expired_users)
+		expired = findExpiredUsers(300, 100)
+		analyzeUsers(expired)
 		flairUsers()
+#one sweep of max posts and comments
 elif command == 'big':
 	readPMs()
 	readFiles()
-	findExpiredUsers(None, None)
-	analyzeUserHist(expired_users)
-	analyzeUserStats(expired_users)
+	expired = findExpiredUsers(None, None)
+	analyzeUsers(expired)
+	flairUsers()
+#small sweep for testing or low activity subs
+elif command == 'small':
+	readPMs()
+	readFiles()
+	expired = findExpiredUsers(5, 5)
+	analyzeUsers(expired)
 	flairUsers()
 #manually apply flair to a user
 elif command == 'manual':
@@ -367,8 +425,7 @@ elif command == 'manual':
 	target = setUser(targetName)
 	if target != None:
 		target_list = [target]
-		analyzeUserHist(target_list)
-		analyzeUserStats(target_list)
+		analyzeUsers(target_list)
 		flairUsers()
 #manually add a user to the whitelist
 elif command == 'whitelist':
