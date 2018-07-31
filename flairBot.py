@@ -24,11 +24,34 @@ expired_users = []
 users_and_flair = {}
 whitelist = []
 
-#all relevant subs
-relevantSubs = ('CryptoCurrency', 'CryptoMarkets', 'CryptoTechnology', 'Blockchain', 'Altcoin', 'Bitcoin', 'BitcoinMarkets', 'Litecoin', 'LitecoinMarkets', 'BitcoinCash', 'btc', 'Ethereum', 'EthTrader', 'Ripple', 'Stellar', 'Vechain', 'Vertcoin', 'Vertcointrader', 'DashPay', 'Monero', 'XMRtrader', 'NanoCurrency', 'WaltonChain', 'IOTA', 'IOTAmarkets', 'Lisk', 'Dogecoin', 'dogemarket', 'NEO', 'NEOTrader', 'Cardano', 'Vergecurrency', 'Electroneum', 'Digibyte', 'EthereumClassic', 'omise_go', 'NEM', 'Myriadcoin', 'Navcoin', 'NXT', 'poetproject', 'ZEC', 'Golemproject', 'Factom', 'QTUM', 'Augur', 'ChainLink', 'LINKtrader', 'XRP', 'Tronix', 'eos', '0xproject', 'zrxtrader', 'KyberNetwork', 'Zilliqa', 'StratisPlatform', 'WavesPlatform', 'WavesTrader', 'Ardor', 'Syscoin', 'Particl', 'BATproject', 'icon', 'helloicon', 'Garlicoin', 'Bancor', 'PIVX', 'Wanchain', 'KomodoPlatform', 'EnigmaProject', 'Ethos_io', 'Decentraland', 'Nebulas', 'ArkEcosystem', 'FunFairTech', 'StatusIM', 'Decred', 'DecentPlatform', 'OntologyNetwork', 'FunFairTech', 'Aeternity', 'Siacoin', 'SiaTrader', 'Storj', 'SafeNetwork', 'Peercoin', 'Namecoin', 'Steem', 'RequestNetwork', 'Oyster', 'KinFoundation', 'ICONOMI', 'GenesisVision', 'Best_of_crypto', 'BitcoinMining', 'CryptoRecruiting', 'CryptoTrade', 'DoItForTheCoin', 'Jobs4Crypto', 'Jobs4Bitcoin', 'LitecoinMining', 'OpenBazaar', 'GPUmining', 'BinanceExchange', 'Binance', 'icocrypto', 'LedgerWallet', 'BitcoinBeginners', 'EtherMining', 'MoneroMining', 'EthereumNoobies', 'Kucoin', 'CoinBase', 'Etherdelta')
-
-#TODO sort subs into individual cryptos for karma breakdown
-
+#Subreddit's with corresponding abreviations
+sub_abrev = {
+	'CRYPTOCURRENCY': 'CC','CRYPTOMARKETS': 'CM','CRYPTOTECHNOLOGY': 'CT','BLOCKCHAIN': 'Blockchain',
+	'ALTCOIN': 'ALT','BITCOIN' : 'BTC','BITCOINMARKETS': 'BTC','LITECOIN': 'LTC','LITECOINMARKETS': 'LTC',
+	'BITCOINCASH': 'BCH','BTC': 'BTC','ETHEREUM': 'ETH','ETHTRADER': 'ETH','RIPPLE': 'Ripple','STELLAR': 'XLM',
+	'VECHAIN': 'VEN','VERTCOIN': 'VTC', 'VERTCOINTRADER': 'VTC','DASHPAY': 'Dashpay', 'MONERO': 'XMR', 
+	'XRMTRADER': 'XRM', 'NANOCURRENCY': 'NANO','WALTONCHAIN': 'WTC', 'IOTA': 'MIOTA', 'IOTAMARKETS': 'MIOTA', 
+	'LISK': 'LSK', 'DOGECOIN': 'DOGE', 'DOGEMARKET': 'DOGE', 'NEO': 'NEO', 'NEOTRADER':'NEO', 'CARDANO': 'ADA',
+	'VERGECURRENCY': 'XVG', 'ELECTRONEUM': 'ETN', 'DIGIBYTE': 'DGB', 'ETHEREUMCLASSIC': 'ETC', 'OMISE_GO': 'OMG',
+	'NEM': 'XEM', 'MYRIADCOIN': 'XMY', 'NAVCOIN': 'NAV', 'NXT': 'NXT', 'POETPROJECT': 'poetproject', 'ZEC': 'ZEC', 
+	'GOLEMPROJECT': 'GNT', 'FACTOM': 'FCT', 'QTUM': 'QTUM', 'AUGUR': 'AU', 'CHAINLINK': 'LINK', 
+	'LINKTRADER': 'LINK', 'XRP': 'XRP', 'TRONIX': 'Tronix', 'EOS': 'EOS', '0XPROJECT': 'ZRX', 'ZRXTRADER': 'ZRX',
+	'KYBERNETWORK': 'KNC', 'ZILLIQA': 'ZIL', 'STRATISPLATFORM': 'STRAT', 'WAVESPLATFORM': 'WAVES',
+	'WAVESTRADER': 'WAVES', 'ARDOR': 'ARDR', 'SYSCOIN': 'SYS', 'PARTICL': 'PART', 'BATPROJECT': 'BATProject',
+	'ICON': 'ICX', 'HELLOICON': 'ICX', 'GARLICOIN': 'GRLC', 'BANCOR': 'BNT', 'PIVX': 'PIVX', 'WANCHAIN': 'WAN',
+	'KOMODOPLATFORM': 'KMD', 'ENIGMAPROJECT': 'ENG', 'ETHOS_IO': 'ETHOS', 'DECENTRALAND': 'MANA',
+	'NEBULAS': 'NAS', 'ARKECOSYSTEM': 'ARK', 'FUNFAIRTECH': 'FUN', 'STATUSIM': 'SNT', 'DECRED': 'DCR',
+	'DECENTPLATFORM': 'DCT', 'ONTOLOGY': 'ONT', 'AETERNITY': 'AE', 'SIACOIN': 'SC', 'SIATRADER': 'SC',
+	'STORJ': 'STORJ', 'SAFENETWORK': 'SafeNetwork', 'PEERCOIN': 'PPC', 'NAMECOIN': 'NMC', 'STEEM': 'STEEM',
+	'REQUESTNETWORK': 'REQ', 'OYSTER': 'PRL', 'KINFOUNDATION': 'KIN', 'ICONOMI': 'ICN', 'GENESISVISION': 'GVT',
+	'BEST_OF_CRYPTO': 'BestOf', 'BITCOINMINING': 'BitcoinMining', 'CRYPTORECRUITING': 'CryptoRecruting',  
+	'DOITFORTHECOIN': 'DoItForTheCoin', 'JOBS4CRYPTO': 'Jobs4Crypto', 'JOBS4BITCOIN': 'Jobs4Bitcoin', 
+	'LITECOINMINING': 'LTC', 'OPENBAZAAR': 'OpenBazzar', 'GPUMINING': 'GPUMining', 'BINANCEEXCHANGE': 'BNB', 
+	'BINANCE': 'BNB', 'ICOCRYPTO': 'icocrypto','LEDGERWALLET': 'LedgerWallet', 'CRYPTOTRADE': 'CryptoTrade',
+	'BITCOINBEGINNERS': 'BitcoinBeginners', 'ETHERMINING': 'ETH','MONEROMINING': 'XRM', 'ETHEREUMNOOBIES': 'ETH', 
+	'KUCOIN': 'Kucoin', 'COINBASE': 'Coinbase', 'ETHERDELTA': 'EtherDelta'
+		}	
+	
 #save current time
 current_time = datetime.now()
 
@@ -68,17 +91,15 @@ def readFiles():
 	
 	for username in whitelistDB:
 		user = setUser(username['username'])
-		if user == None:
-			addWhitelist(username['username'])
-		else:
+		if user != None and user not in whitelist:
 			whitelist.append(user)
 	print ('All users read from whitelist')
 
 #scrape main sub for users not in current_users and not already in expired_users
-def findExpiredUsers():
+def findExpiredUsers(cmnt_limit, post_limit):
 	global current_users, expired_users
 	print ('Scraping comments')
-	for comment in cc_sub.comments(limit = 300):
+	for comment in cc_sub.comments(limit = cmnt_limit):
 		user = comment.author
 		username = str(user)
 		if user not in current_users and user not in expired_users and user not in whitelist and checkUser(user) == True:
@@ -86,7 +107,7 @@ def findExpiredUsers():
 			print ('\tNew user added to expired list: ' + username)
 
 	print ('Scraping submissions')
-	for post in cc_sub.new(limit = 100):
+	for post in cc_sub.new(limit = post_limit):
 		user = post.author
 		username = str(user)
 		if user not in current_users and user not in expired_users and user not in whitelist and checkUser(user) == True:
@@ -98,9 +119,9 @@ def analyzeUserHist(users):
 	global users_and_flair, relevantSubs
 	print ('Analyzing all users in current list: ' + str(len(users)))
 	userCount = 0
-	subList = makeSubList(relevantSubs)
 
 	for user in users:
+		updateDB(user)
 		username = str(user)
 		#Setup float and int numbers for sentiment analysis
 		sub_counter = Counter()
@@ -110,11 +131,14 @@ def analyzeUserHist(users):
 		countPos = 0
 		totalNeg = 0.0
 		totalPos = 0.0
+		postCount = 0
 		
 		#Analyze a users comments
 		comments = user.comments.new(limit = None)
 		for comment in comments:
-			if comment.subreddit in subList:
+			cmnt_sub = comment.subreddit
+			sub_name = str(cmnt_sub).upper()
+			if sub_name in sub_abrev:
 				commentSent = analyzeText(comment.body)
 				count += 1
 				if commentSent < -0.5:
@@ -124,20 +148,25 @@ def analyzeUserHist(users):
 					countPos += 1
 					totalPos += commentSent
 				#Count comment's karma in sub
-				sub_counter[str(comment.subreddit)] += comment.score
-			
-		#analyze sentiment statistics
-		sentFalir(user, count, countPos, countNeg, totalNeg, totalPos)
+				abrev = sub_abrev[sub_name]
+				sub_counter[abrev] += comment.score
 		
 		#Count post's karma in sub
 		posts = user.submissions.new(limit = None)
 		for post in posts:
-			if post.subreddit in subList:
-				sub_counter[str(post.subreddit)] += post.score
+			post_sub = post.subreddit
+			sub_name = str(post_sub).upper()
+			if sub_name in sub_abrev:
+				postCount += 1
+				abrev = sub_abrev[sub_name]
+				sub_counter[abrev] += post.score
+		
+		#analyze sentiment statistics
+		sentFalir(user, count, postCount, countPos, countNeg, totalNeg, totalPos)
 		
 		#Add flair for sub karma > 1k	
 		for key, value in sub_counter.most_common(2):
-			if value > 1000:
+			if value > 500:
 				flairText = key + ': ' + str(value) + ' karma'
 				appendFlair(user, flairText)
 		#Add flair for sub karma < -10
@@ -176,7 +205,7 @@ def analyzeUserStats(users):
 			appendFlair(user, str(user.comment_karma) + ' cmnt karma')
 
 #Calculate Positive/Negative score from passed values
-def sentFalir(user, count, countPos, countNeg, totalNeg, totalPos):
+def sentFalir(user, count, postCount, countPos, countNeg, totalNeg, totalPos):
 	username = str(user)
 	#Require at least 15 comments for accurate analysis
 	if count > 15:
@@ -208,10 +237,32 @@ def sentFalir(user, count, countPos, countNeg, totalNeg, totalPos):
 		else:
 			print ('\t' + username + ': Unknown ' + str(diffPerc)[:4] + '% Count: ' + str(count) + ' Sent: ' + str(sentPerc)[:4] + ' CountSent: ' + str(countPos + countNeg))
 	#If user has less than 15 comments then flair user as new to crypto		
-	else:
+	elif postCount + count < 15:
 		appendFlair(user, 'New to crypto')
 		print ('\t' + username + ': Not enough comments Count: ' + str(count))
-		
+
+#Search PM's for new messages with the syntax '!whitelist /u/someuser and add someuser to the whitelist
+def readPMs():
+	messages = reddit.inbox.unread()
+	for message in messages:
+		command = message.body.split()
+		if len(command) == 2 and message.author in mods:
+			first = command.pop(0)
+			second = command.pop(0)
+			print ('Command: ' + first + ' ' + second)
+			if first == "!whitelist":
+				if second.startswith("/u/"):
+					targetUser = second[3:]
+				elif second.startswith("u/"):
+					targetUser = second[2:]
+				else:
+					targetUser = second
+				addWhitelist(targetUser)
+				message.mark_read()
+				print ('Message about: ' + second + ' was accepted and marked read')
+		else:
+			print ('Message was not accpeted and left unread')
+	
 #concatonate flair
 def appendFlair(user, newFlair):
 	username = str(user)
@@ -231,13 +282,12 @@ def flairUsers():
 		flair = users_and_flair[username]
 		cc_sub.flair.set(user, flair)
 		print (username + ': ' + flair)
-		updateDB(user, flair)
 
 #add users to database with flair
-def updateDB(user, flair):
+def updateDB(user):
 	username = str(user)
 	flair_time = json_serial(current_time)
-	userDB.insert({'username' : username, 'flair_age' : flair_time, 'flair' : flair})
+	userDB.insert({'username' : username, 'flair_age' : flair_time})
 
 #Add a username to the whitelistDB
 def addWhitelist(username):
@@ -277,7 +327,13 @@ def setUser(username):
 		return reddit.redditor(username)
 	except (prawcore.exceptions.NotFound, AttributeError):
 		return None
-
+		
+def setAccnts(usernames):
+	return_list = []
+	for username in usernames:
+		return_list.append(reddit.redditor(username))
+	return return_list
+		
 #check if user object is accessible
 def checkUser(user):
 	try:
@@ -287,15 +343,24 @@ def checkUser(user):
 	return True
 
 #main method
+mods = setAccnts({'_CapR_', 'turtleflax', 'PrinceKael', 'Christi123321', ' publicmodlogs', 'AutoModerator', 'CryptoMarketsMod', 'davidvanbeveren', 'trailblazerwriting', 'golden_china'})
 command = sys.argv[1]
 #continuously scrape subreddit and apply flair to new users
-if command == 'flair':
+if command == 'auto':
 	while True:
+		readPMs()
 		readFiles()
-		findExpiredUsers()
+		findExpiredUsers(300, 100)
 		analyzeUserHist(expired_users)
 		analyzeUserStats(expired_users)
 		flairUsers()
+elif command == 'big':
+	readPMs()
+	readFiles()
+	findExpiredUsers(None, None)
+	analyzeUserHist(expired_users)
+	analyzeUserStats(expired_users)
+	flairUsers()
 #manually apply flair to a user
 elif command == 'manual':
 	targetName = sys.argv[2]
