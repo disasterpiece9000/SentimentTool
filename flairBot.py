@@ -115,7 +115,7 @@ def findExpiredUsers(parent_sub, cmnt_limit, post_limit, current_users, whitelis
 		if user not in current_users and user not in expired_users and user not in whitelist and checkUser(user) == True:
 			expired_users.append(user)
 			print ('\tNew user added to expired list: ' + username)
-	return expired_users
+	return expired_users 
 
 #main method for account analysis
 def analyzeUsers(users, users_and_flair, parent_sub):
