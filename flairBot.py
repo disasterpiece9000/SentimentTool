@@ -18,11 +18,6 @@ from tinydb import TinyDB, Query
 #sentiment analyzer
 sid = SentimentIntensityAnalyzer()
 
-#lists of users for filters
-current_users = []
-users_and_flair = {}
-whitelist = []
-
 #Subreddit's with corresponding abreviations
 sub_abrev = {
 	'CRYPTOCURRENCY': 'CC','CRYPTOMARKETS': 'CM','CRYPTOTECHNOLOGY': 'CT','BLOCKCHAIN': 'Blockchain',
@@ -57,22 +52,23 @@ current_time = datetime.now()
 #start instance of Reddit
 reddit = praw.Reddit('SentimentBot')
 
-#subreddit for scraping/flairs
-cc_sub = reddit.subreddit('cryptomarkets')
-
-#initialize TInyDB and load databases
-userDB = TinyDB('userDB.json')
-whitelistDB = TinyDB('whitelist.json')
+#initialize sub specific global variables
+users_and_flair = {}
 find_stuff = Query()
 
+#lists of mods
+CMmods = ('_CapR_', 'turtleflax', 'PrinceKael', 'Christi123321', ' publicmodlogs', 'AutoModerator', 'CryptoMarketsMod', 'davidvanbeveren', 'trailblazerwriting', 'golden_china', 'PhantomMod')
+CTmods = ('davidvanbeveren', '_CapR_', 'bLbGoldeN', 'AtHeartEngineer', 'TheRetroguy', 'turtleflax', 'LacticLlama', 'ndha1995', 'Neophyte-', 'AutoModerator', 'CryptoTechnologyMod', 'publicmodlogs')
+
+#sub lists with DB info
+sub_and_userDB = {'CryptoMarkets': 'CMuserDB', 'CryptoTechnology': 'CTuserDB'}
+sub_and_whitelist = {'CryptoMarkets': 'CMwhitelist', 'CryptoTechnology': 'CTwhitelist'}
+sub_and_mods = {'CryptoMarkets': CMmods, 'CryptoTechnology': CTmods}
+
 #read users from databases
-def readFiles():
-	global current_users, users_and_flair, current_time, whitelist
-	#update globals
-	current_time = datetime.now()
-	current_users.clear()
-	users_and_flair.clear()
-	whitelist.clear()
+def readUserDB(sub_name):
+	returnList = []
+	userDB = TinyDB(sub_and_userDB[sub_name] + '.json')
 	
 	for user in userDB:
 		tdelta = current_time - dateutil.parser.parse(user['flair_age'])
@@ -84,21 +80,28 @@ def readFiles():
 			userObj = setUser(user['username'])
 			#check if user is valid
 			if userObj != None:
-				current_users.append(userObj)
+				returnList.append(userObj)
 	print ('Read all current users')
+	return returnList
+	
+def readWhitelistDB(sub_name):
+	returnList = []
+	whitelistDB = TinyDB(sub_and_whitelist[sub_name] + '.json')
 	
 	for username in whitelistDB:
 		user = setUser(username['username'])
-		if user != None and user not in whitelist:
-			whitelist.append(user)
+		if user != None:
+			returnList.append(user)
 	print ('All users read from whitelist')
+	return returnList
 
 #scrape main sub for users not in current_users and not already in expired_users
-def findExpiredUsers(cmnt_limit, post_limit):
-	global current_users
+def findExpiredUsers(parent_sub, cmnt_limit, post_limit, current_users, whitelist):
 	expired_users = []
+	print (parent_sub)
+	sub = reddit.subreddit(parent_sub)
 	print ('Scraping comments')
-	for comment in cc_sub.comments(limit = cmnt_limit):
+	for comment in sub.comments(limit = cmnt_limit):
 		user = comment.author
 		username = str(user)
 		if user not in current_users and user not in expired_users and user not in whitelist and checkUser(user) == True:
@@ -106,7 +109,7 @@ def findExpiredUsers(cmnt_limit, post_limit):
 			print ('\tNew user added to expired list: ' + username)
 
 	print ('Scraping submissions')
-	for post in cc_sub.new(limit = post_limit):
+	for post in sub.new(limit = post_limit):
 		user = post.author
 		username = str(user)
 		if user not in current_users and user not in expired_users and user not in whitelist and checkUser(user) == True:
@@ -115,26 +118,26 @@ def findExpiredUsers(cmnt_limit, post_limit):
 	return expired_users
 
 #main method for account analysis
-def analyzeUsers(users):
+def analyzeUsers(users, users_and_flair, parent_sub):
 	print ('Analyzing all users in current list: ' + str(len(users)))
 	for user in users:
 		#used to implement small version of karma breakdown if necessairy
 		flair_count = 0
-		#scrape user's comments and posts
-		hist_info = analyzeUserHist(user)
 		#hist_info returns karma breakdown by crypto, T/F value for flair assignment, and a count of total posts and submissions
+		hist_info = analyzeUserHist(user, users_and_flair, parent_sub)
 		karma_stats = hist_info.pop(0)
 		sent_flair = hist_info.pop(0)
 		total_submis = hist_info.pop(0)
+		
 		if sent_flair == True:
 			flair_count += 1
 		#flairs user for account < 1 yr.
-		age_flair = analyzeUserAge(user)
+		age_flair = analyzeUserAge(user, users_and_flair, parent_sub)
 		if age_flair == True:
 			flair_count += 1
 		#flairs user for karma < 1k
 		if user.comment_karma < 1000:
-			appendFlair(user, str(user.comment_karma) + ' cmnt karma')
+			appendFlair(user, str(user.comment_karma) + ' cmnt karma', users_and_flair)
 			flair_count += 1
 		#if user has attribute 'New to crypto' then don't add karma breakdown
 		if total_submis > 15:
@@ -142,15 +145,13 @@ def analyzeUsers(users):
 			#if there are 2+ flair attributes already then use condensed version
 			if flair_count >= 2:
 				small = True
-			analyzeUserKarma(user, karma_stats, small)
+			analyzeUserKarma(user, karma_stats, small, users_and_flair, parent_sub)
 		else:
-			appendFlair(user, 'New to crypto')
-		updateDB(user, total_submis)
+			appendFlair(user, 'New to crypto', users_and_flair)
+		updateDB(user, total_submis, parent_sub)
 
 #sentiment analysis of expired_users
-def analyzeUserHist(user):
-	global users_and_flair, relevantSubs
-
+def analyzeUserHist(user, users_and_flair, parent_sub):
 	username = str(user)
 	#Setup float and int numbers for sentiment analysis
 	sub_counter = Counter()
@@ -191,13 +192,13 @@ def analyzeUserHist(user):
 			sub_counter[abrev] += post.score
 	
 	#analyze sentiment statistics
-	flaired = sentFlair(user, count, countPos, countNeg, totalNeg, totalPos)
+	flaired = sentFlair(user, count, countPos, countNeg, totalNeg, totalPos, users_and_flair)
 	
 	totalPost = postCount + count
 	return [sub_counter, flaired, totalPost]
 	
 #flair new accounts
-def analyzeUserAge(user):
+def analyzeUserAge(user, users_and_flair, parent_sub):
 	username = str(user)
 	userCreated = datetime.fromtimestamp(user.created)
 	tdelta = relativedelta.relativedelta(current_time, userCreated)
@@ -209,39 +210,39 @@ def analyzeUserAge(user):
 			days = tdelta.days
 			flairText = 'Redditor for ' + str(days)
 			if days == 1:
-				appendFlair(username, flairText + ' day')
+				appendFlair(username, flairText + ' day', users_and_flair)
 			else:
-				appendFlair(username, flairText + ' days')
+				appendFlair(username, flairText + ' days', users_and_flair)
 		else:
 			months = tdelta.months
 			flairText = 'Redditor for ' + str(months)
 			if months == 1:
-				appendFlair(user, flairText + ' month')
+				appendFlair(user, flairText + ' month', users_and_flair)
 			else:
-				appendFlair(user, flairText + ' months')
+				appendFlair(user, flairText + ' months', users_and_flair)
 	return flaired
 
-def analyzeUserKarma(user, sub_counter, small):
-	parent_sub = 'CM'
-	hold_flair = parent_sub + ': ' + str(sub_counter[parent_sub]) + ' karma'
+def analyzeUserKarma(user, sub_counter, small, users_and_flair, parent_sub):
+	abrev = sub_abrev[parent_sub.upper()]
+	hold_flair = abrev + ': ' + str(sub_counter[parent_sub]) + ' karma'
 	
 	if small == True:
 		neg_flair = False
 		neg_score = 0
 		neg_sub = ''
 		for key, value in sub_counter.most_common():
-			if value < -10 and value < neg_score and key != parent_sub:
+			if value < -10 and value < neg_score and key != abrev:
 				neg_score = value
 				neg_sub = key
 				neg_flair = True
 		if neg_flair == True:
 			hold_flair += ' ' + neg_sub + ': ' + str(neg_score) + ' karma'
-			appendFlair(user, hold_flair)
+			appendFlair(user, hold_flair, users_and_flair)
 		else:
 			for key, value in sub_counter.most_common(1):
-				if value > 500 and key != parent_sub:
+				if value > 500 and key != abrev:
 					hold_flair += ' ' + key + ': ' + str(value) + ' karma'
-			appendFlair(user, hold_flair)
+			appendFlair(user, hold_flair, users_and_flair)
 		
 	else:
 		#Add flair for sub karma > 1k	
@@ -252,10 +253,10 @@ def analyzeUserKarma(user, sub_counter, small):
 		for key, value in sub_counter.most_common():
 			if value < -10 and key != parent_sub:
 				hold_flair += ' ' + key + ': ' + str(value) + ' karma'
-		appendFlair(user, hold_flair)
+		appendFlair(user, hold_flair, users_and_flair)
 
 #Calculate Positive/Negative score from passed values
-def sentFlair(user, count, countPos, countNeg, totalNeg, totalPos):
+def sentFlair(user, count, countPos, countNeg, totalNeg, totalPos, users_and_flair):
 	username = str(user)
 	flaired = False
 	#Require at least 15 comments for accurate analysis
@@ -272,7 +273,7 @@ def sentFlair(user, count, countPos, countNeg, totalNeg, totalPos):
 		if diffPerc < 0:
 			#If there are 20% more negative comments than positive then flair user as negative
 			if diffPerc < -20:
-				appendFlair(user, 'Negative')
+				appendFlair(user, 'Negative', users_and_flair)
 				print ('\t' + username + ': Negative ' + str(diffPerc)[:4] + '% Count: ' + str(count) + ' Sent: ' + str(sentPerc)[:4])
 				flaired = True
 			#else:
@@ -281,7 +282,7 @@ def sentFlair(user, count, countPos, countNeg, totalNeg, totalPos):
 		elif diffPerc > 0:
 			#If there are 35% more positive comments than negative then flair user as positive
 			if diffPerc > 35:
-				appendFlair(user, 'Positive')
+				appendFlair(user, 'Positive', users_and_flair)
 				flaired = True
 				print ('\t' + username + ': Positive ' + str(diffPerc)[:4] + '% Count: ' + str(count) + ' Sent: ' + str(sentPerc)[:4])
 			#else:
@@ -291,11 +292,13 @@ def sentFlair(user, count, countPos, countNeg, totalNeg, totalPos):
 	return flaired
 
 #Search PM's for new messages with the syntax '!whitelist /u/someuser and add someuser to the whitelist
-def readPMs():
+def readPMs(parent_sub, whitelist):
+	mods = sub_and_mods[parent_sub]
+	
 	messages = reddit.inbox.unread()
 	for message in messages:
 		command = message.body.split()
-		if len(command) == 2 and message.author in mods:
+		if len(command) == 2 and str(message.author) in mods:
 			first = command.pop(0)
 			second = command.pop(0)
 			print ('Command: ' + first + ' ' + second)
@@ -306,14 +309,14 @@ def readPMs():
 					targetUser = second[2:]
 				else:
 					targetUser = second
-				addWhitelist(targetUser)
+				addWhitelist(targetUser, parent_sub, whitelist)
 				message.mark_read()
 				print ('Message about: ' + second + ' was accepted and marked read')
 		else:
 			print ('Message was not accpeted and left unread')
 	
 #concatonate flair
-def appendFlair(user, newFlair):
+def appendFlair(user, newFlair, users_and_flair):
 	username = str(user)
 	if username in users_and_flair:
 		holdFlair = users_and_flair[username]
@@ -323,23 +326,25 @@ def appendFlair(user, newFlair):
 		users_and_flair[username] = newFlair
 
 #assign flair to users
-def flairUsers():
-	global users_and_flair
-	print ('\nUsers and corresponding flair:')
+def flairUsers(users_and_flair, parent_sub):
+	sub = reddit.subreddit(parent_sub)
+	print ('\nUsers and corresponding flair:\n')
 	for username in users_and_flair:
 		user = setUser(username)
 		flair = users_and_flair[username]
-		cc_sub.flair.set(user, flair)
+		sub.flair.set(user, flair)
 		print (username + ': ' + flair)
 
 #add users to database with flair
-def updateDB(user, total_submis):
+def updateDB(user, total_submis, parent_sub):
 	username = str(user)
 	flair_time = json_serial(current_time)
+	userDB = TinyDB(sub_and_userDB[parent_sub] + '.json')
 	userDB.insert({'username' : username, 'flair_age' : flair_time, 'submis_count': total_submis})
 
 #Add a username to the whitelistDB
-def addWhitelist(username):
+def addWhitelist(username, parent_sub, whitelist):
+	whitelistDB = TinyDB(sub_and_whitelist[parent_sub] + '.json')
 	whitelistDB.insert({'username' : username})
 	whitelist.append(username)
 	print (username + ' added to whitelist')
@@ -388,49 +393,71 @@ def setAccnts(usernames):
 def checkUser(user):
 	try:
 		user.fullname
-	except prawcore.exceptions.NotFound:
+	except (prawcore.exceptions.NotFound, AttributeError):
 		return False
 	return True
 
 #main method
-#list of mods to accept PMs from
-mods = setAccnts({'_CapR_', 'turtleflax', 'PrinceKael', 'Christi123321', ' publicmodlogs', 'AutoModerator', 'CryptoMarketsMod', 'davidvanbeveren', 'trailblazerwriting', 'golden_china', 'PhantomMod'})
-#get command line arg
+#get command line args
 command = sys.argv[1]
 #continuously scrape subreddit and apply flair to new users
 if command == 'auto':
 	while True:
-		readPMs()
-		readFiles()
-		expired = findExpiredUsers(300, 100)
-		analyzeUsers(expired)
-		flairUsers()
-#one sweep of max posts and comments
-elif command == 'big':
-	readPMs()
-	readFiles()
-	expired = findExpiredUsers(None, None)
-	analyzeUsers(expired)
-	flairUsers()
-#small sweep for testing or low activity subs
-elif command == 'small':
-	readPMs()
-	readFiles()
-	expired = findExpiredUsers(5, 5)
-	analyzeUsers(expired)
-	flairUsers()
-#manually apply flair to a user
-elif command == 'manual':
-	targetName = sys.argv[2]
-	target = setUser(targetName)
-	if target != None:
-		target_list = [target]
-		analyzeUsers(target_list)
-		flairUsers()
-#manually add a user to the whitelist
-elif command == 'whitelist':
-	targetName = sys.argv[2]
-	addWhitelist(targetName)
-#print guide to command line arguments
+		for parent_sub in sub_and_userDB:
+			print ('Scraping: ' + parent_sub)
+			current_users = readUserDB(parent_sub)
+			whitelist = readWhitelistDB(parent_sub)
+			users_and_flair = {}
+			
+			readPMs(parent_sub, whitelist)
+			expired = findExpiredUsers(parent_sub, 300, 100, current_users, whitelist)
+			analyzeUsers(expired, users_and_flair, parent_sub)
+			flairUsers(users_and_flair, parent_sub)
+			#print('Sleeping for 1 min')
+			#time.sleep(60)
 else:
-	print ('No arg given. Better luck next time\nArgs:\n\tflair - scrape target sub for expired users\n\tmanual  someuser- manually flair a user\n\twhitelist someuser - add a user to the whitelist')
+	parent_sub = sys.argv[2]
+	#one sweep of max posts and comments
+	if command == 'big':
+		print ('Scraping: ' + parent_sub)
+		current_users = readUserDB(parent_sub)
+		whitelist = readWhitelistDB(parent_sub)
+		users_and_flair = {}
+		
+		readPMs(parent_sub, whitelist)
+		expired = findExpiredUsers(parent_sub, None, None, current_users, whitelist)
+		analyzeUsers(expired, users_and_flair, parent_sub)
+		flairUsers(users_and_flair, parent_sub)
+	#small sweep for testing or low activity subs
+	elif command == 'small':
+		print ('Scraping: ' + parent_sub)
+		current_users = readUserDB(parent_sub)
+		whitelist = readWhitelistDB(parent_sub)
+		users_and_flair = {}
+		
+		readPMs(parent_sub, whitelist)
+		expired = findExpiredUsers(parent_sub, 10, 5, current_users, whitelist)
+		analyzeUsers(expired, users_and_flair, parent_sub)
+		flairUsers(users_and_flair, parent_sub)
+	#manually apply flair to a user
+	elif command == 'manual':
+		current_users = readUserDB(parent_sub)
+		whitelist = readWhitelistDB(parent_sub)
+		users_and_flair = {}
+		targetName = sys.argv[3]
+		target = setUser(targetName)
+		
+		if target != None:
+			target_list = [target]
+			analyzeUsers(target_list, users_and_flair, parent_sub)
+			flairUsers(users_and_flair, parent_sub)
+	#manually add a user to the whitelist
+	elif command == 'whitelist':
+		current_users = readUserDB(parent_sub)
+		whitelist = readWhitelistDB(parent_sub)
+		users_and_flair = {}
+		targetName = sys.argv[2]
+		addWhitelist(targetName, parent_sub, whitelist)
+	#print guide to command line arguments
+	else:
+		print ('No arg given. Better luck next time\nArgs:\n\tflair - scrape target sub for expired users\n\tmanual  someuser- manually flair a user\n\twhitelist someuser - add a user to the whitelist')
