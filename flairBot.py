@@ -60,10 +60,17 @@ find_stuff = Query()
 CMmods = ('_CapR_', 'turtleflax', 'PrinceKael', 'Christi123321', ' publicmodlogs', 'AutoModerator', 'CryptoMarketsMod', 'davidvanbeveren', 'trailblazerwriting', 'golden_china', 'PhantomMod')
 CTmods = ('davidvanbeveren', '_CapR_', 'bLbGoldeN', 'AtHeartEngineer', 'TheRetroguy', 'turtleflax', 'LacticLlama', 'ndha1995', 'Neophyte-', 'AutoModerator', 'CryptoTechnologyMod', 'publicmodlogs')
 
+#subs and whitelist CSS
+CCcss = ('Trophybronze', 'Trophysilver', 'Trophygold')
+CMcss = ('Bitcoin')
+CTcss = ()
+
 #sub lists with DB info
+subs = ['CryptoMarkets', 'CryptoTechnology']
 sub_and_userDB = {'CryptoMarkets': 'CMuserDB', 'CryptoTechnology': 'CTuserDB'}
 sub_and_whitelist = {'CryptoMarkets': 'CMwhitelist', 'CryptoTechnology': 'CTwhitelist'}
 sub_and_mods = {'CryptoMarkets': CMmods, 'CryptoTechnology': CTmods}
+subs_and_css = {'CryptoMarkets': CMcss, 'CryptoTechnology': CTcss}
 
 #read users from databases
 def readUserDB(sub_name):
@@ -94,16 +101,31 @@ def readWhitelistDB(sub_name):
 			returnList.append(user)
 	print ('All users read from whitelist')
 	return returnList
+	
 
 #scrape main sub for users not in current_users and not already in expired_users
 def findExpiredUsers(parent_sub, cmnt_limit, post_limit, current_users, whitelist):
 	expired_users = []
-	print (parent_sub)
 	sub = reddit.subreddit(parent_sub)
+	css_whitelist = subs_and_css[parent_sub]
+	css_and_text = {}
+	templates = list(sub.flair.templates)
+	for template in templates:
+		css_and_text[template['flair_css_class']] = template['flair_text']
+	
 	print ('Scraping comments')
 	for comment in sub.comments(limit = cmnt_limit):
 		user = comment.author
 		username = str(user)
+		#user_css = (next(sub.flair(user))['flair_css_class'])
+		
+		#if user_css == None:
+		#	user_css = 'my fears were valid'
+		
+		#if user_css in css_whitelist and user not in whitelist:
+		#	addWhitelist(username, parent_sub, whitelist)
+		#	sub.flair.set(user, css_and_text[user_css], user_css)
+		#	print ('\tNew user added to whitelist and flair set to default')
 		if user not in current_users and user not in expired_users and user not in whitelist and checkUser(user) == True:
 			expired_users.append(user)
 			print ('\tNew user added to expired list: ' + username)
@@ -112,10 +134,27 @@ def findExpiredUsers(parent_sub, cmnt_limit, post_limit, current_users, whitelis
 	for post in sub.new(limit = post_limit):
 		user = post.author
 		username = str(user)
+		#user_css = (next(sub.flair(user))['flair_css_class'])
+		
+		#if user_css == None:
+		#	user_css = 'my fears were valid'
+		#
+		#if user_css in css_whitelist and user not in whitelist:
+		#	addWhitelist(username, parent_sub, whitelist)
+		#	sub.flair.set(user, css_and_text[user_css], user_css)
+		#	print ('\tNew user added to whitelist and flair set to default')
 		if user not in current_users and user not in expired_users and user not in whitelist and checkUser(user) == True:
 			expired_users.append(user)
 			print ('\tNew user added to expired list: ' + username)
-	return expired_users 
+	return expired_users
+	
+def clearWhitelistFlair(parent_sub, whitelist):
+	sub = reddit.subreddit(parent_sub)
+	for user in whitelist:
+		user_css = (next(sub.flair(user))['flair_css_class'])
+		sub.flair.set(user, '', user_css)
+	print ("Whitelist users' flair cleared")
+	
 
 #main method for account analysis
 def analyzeUsers(users, users_and_flair, parent_sub):
@@ -224,7 +263,7 @@ def analyzeUserAge(user, users_and_flair, parent_sub):
 
 def analyzeUserKarma(user, sub_counter, small, users_and_flair, parent_sub):
 	abrev = sub_abrev[parent_sub.upper()]
-	hold_flair = abrev + ': ' + str(sub_counter[parent_sub]) + ' karma'
+	hold_flair = abrev + ': ' + str(sub_counter[abrev]) + ' karma'
 	
 	if small == True:
 		neg_flair = False
@@ -276,8 +315,6 @@ def sentFlair(user, count, countPos, countNeg, totalNeg, totalPos, users_and_fla
 				appendFlair(user, 'Negative', users_and_flair)
 				print ('\t' + username + ': Negative ' + str(diffPerc)[:4] + '% Count: ' + str(count) + ' Sent: ' + str(sentPerc)[:4])
 				flaired = True
-			#else:
-				#print ('\t' + username + ': avgNeg: ' + str(avgNeg) + ' diffPerc: ' + str(diffPerc))
 
 		elif diffPerc > 0:
 			#If there are 35% more positive comments than negative then flair user as positive
@@ -285,8 +322,7 @@ def sentFlair(user, count, countPos, countNeg, totalNeg, totalPos, users_and_fla
 				appendFlair(user, 'Positive', users_and_flair)
 				flaired = True
 				print ('\t' + username + ': Positive ' + str(diffPerc)[:4] + '% Count: ' + str(count) + ' Sent: ' + str(sentPerc)[:4])
-			#else:
-				#print ('\t' + username + ': avgPos: ' + str(avgPos) + ' diffPerc: ' + str(diffPerc))
+
 		else:
 			print ('\t' + username + ': Unknown ' + str(diffPerc)[:4] + '% Count: ' + str(count) + ' Sent: ' + str(sentPerc)[:4] + ' CountSent: ' + str(countPos + countNeg))
 	return flaired
@@ -403,18 +439,18 @@ command = sys.argv[1]
 #continuously scrape subreddit and apply flair to new users
 if command == 'auto':
 	while True:
-		for parent_sub in sub_and_userDB:
+		for parent_sub in subs:
 			print ('Scraping: ' + parent_sub)
 			current_users = readUserDB(parent_sub)
 			whitelist = readWhitelistDB(parent_sub)
 			users_and_flair = {}
 			
-			readPMs(parent_sub, whitelist)
+			#readPMs(parent_sub, whitelist)
 			expired = findExpiredUsers(parent_sub, 300, 100, current_users, whitelist)
 			analyzeUsers(expired, users_and_flair, parent_sub)
 			flairUsers(users_and_flair, parent_sub)
-			#print('Sleeping for 1 min')
-			#time.sleep(60)
+		print('Sleeping for 1 min')
+		time.sleep(60)
 else:
 	parent_sub = sys.argv[2]
 	#one sweep of max posts and comments
@@ -424,7 +460,7 @@ else:
 		whitelist = readWhitelistDB(parent_sub)
 		users_and_flair = {}
 		
-		readPMs(parent_sub, whitelist)
+		#readPMs(parent_sub, whitelist)
 		expired = findExpiredUsers(parent_sub, None, None, current_users, whitelist)
 		analyzeUsers(expired, users_and_flair, parent_sub)
 		flairUsers(users_and_flair, parent_sub)
@@ -435,7 +471,7 @@ else:
 		whitelist = readWhitelistDB(parent_sub)
 		users_and_flair = {}
 		
-		readPMs(parent_sub, whitelist)
+		#readPMs(parent_sub, whitelist)
 		expired = findExpiredUsers(parent_sub, 10, 5, current_users, whitelist)
 		analyzeUsers(expired, users_and_flair, parent_sub)
 		flairUsers(users_and_flair, parent_sub)
@@ -458,6 +494,10 @@ else:
 		users_and_flair = {}
 		targetName = sys.argv[2]
 		addWhitelist(targetName, parent_sub, whitelist)
+	#clear all users flair in whitelist
+	elif command == 'clear_whitelist':
+		whitelist = readWhitelistDB(parent_sub)
+		clearWhitelistFlair(parent_sub, whitelist)
 	#print guide to command line arguments
 	else:
 		print ('No arg given. Better luck next time\nArgs:\n\tflair - scrape target sub for expired users\n\tmanual  someuser- manually flair a user\n\twhitelist someuser - add a user to the whitelist')
