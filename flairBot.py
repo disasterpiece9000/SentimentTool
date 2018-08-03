@@ -65,17 +65,22 @@ CCcss = ('Trophybronze', 'Trophysilver', 'Trophygold')
 CMcss = ('Bitcoin')
 CTcss = ()
 
-#sub lists with DB info
+#sub specific rule sets
+CTrules = {'sentiment': True, 'karma_breakdown': True, 'comment_karma': True, 'accnt_age': True, 'new': True}
+CMrules = {'sentiment': True, 'karma_breakdown': True, 'comment_karma': True, 'accnt_age': True, 'new': True}
+
+#sub lists
 subs = ['CryptoMarkets', 'CryptoTechnology']
-sub_and_userDB = {'CryptoMarkets': 'CMuserDB', 'CryptoTechnology': 'CTuserDB'}
-sub_and_whitelist = {'CryptoMarkets': 'CMwhitelist', 'CryptoTechnology': 'CTwhitelist'}
-sub_and_mods = {'CryptoMarkets': CMmods, 'CryptoTechnology': CTmods}
+subs_and_userDB = {'CryptoMarkets': 'CMuserDB', 'CryptoTechnology': 'CTuserDB'}
+subs_and_whitelist = {'CryptoMarkets': 'CMwhitelist', 'CryptoTechnology': 'CTwhitelist'}
+subs_and_mods = {'CryptoMarkets': CMmods, 'CryptoTechnology': CTmods}
 subs_and_css = {'CryptoMarkets': CMcss, 'CryptoTechnology': CTcss}
+subs_and_rules = {'CryptoMarkets': CMrules, 'CryptoTechnology': CTrules}
 
 #read users from databases
 def readUserDB(sub_name):
 	returnList = []
-	userDB = TinyDB(sub_and_userDB[sub_name] + '.json')
+	userDB = TinyDB(subs_and_userDB[sub_name] + '.json')
 	
 	for user in userDB:
 		tdelta = current_time - dateutil.parser.parse(user['flair_age'])
@@ -93,7 +98,7 @@ def readUserDB(sub_name):
 	
 def readWhitelistDB(sub_name):
 	returnList = []
-	whitelistDB = TinyDB(sub_and_whitelist[sub_name] + '.json')
+	whitelistDB = TinyDB(subs_and_whitelist[sub_name] + '.json')
 	
 	for username in whitelistDB:
 		user = setUser(username['username'])
@@ -158,39 +163,48 @@ def clearWhitelistFlair(parent_sub, whitelist):
 
 #main method for account analysis
 def analyzeUsers(users, users_and_flair, parent_sub):
+	#Rules for what flair attributes are used
+	sub_rules = subs_and_rules[parent_sub]
 	print ('Analyzing all users in current list: ' + str(len(users)))
 	for user in users:
 		#used to implement small version of karma breakdown if necessairy
 		flair_count = 0
 		#hist_info returns karma breakdown by crypto, T/F value for flair assignment, and a count of total posts and submissions
-		hist_info = analyzeUserHist(user, users_and_flair, parent_sub)
+		hist_info = analyzeUserHist(user, users_and_flair, parent_sub, sub_rules['sentiment'])
 		karma_stats = hist_info.pop(0)
 		sent_flair = hist_info.pop(0)
 		total_submis = hist_info.pop(0)
-		
 		if sent_flair == True:
 			flair_count += 1
-		#flairs user for account < 1 yr.
-		age_flair = analyzeUserAge(user, users_and_flair, parent_sub)
+		
+		if sub_rules['accnt_age'] == True:
+			#flairs user for account < 1 yr.
+			age_flair = analyzeUserAge(user, users_and_flair, parent_sub)
+		else:
+			age_flair = False
 		if age_flair == True:
 			flair_count += 1
-		#flairs user for karma < 1k
-		if user.comment_karma < 1000:
-			appendFlair(user, str(user.comment_karma) + ' cmnt karma', users_and_flair)
-			flair_count += 1
+		
+		if sub_rules['comment_karma'] == True:
+			#flairs user for karma < 1k
+			if user.comment_karma < 1000:
+				appendFlair(user, str(user.comment_karma) + ' cmnt karma', users_and_flair)
+				flair_count += 1
+
 		#if user has attribute 'New to crypto' then don't add karma breakdown
 		if total_submis > 15:
 			small = False
 			#if there are 2+ flair attributes already then use condensed version
 			if flair_count >= 2:
 				small = True
-			analyzeUserKarma(user, karma_stats, small, users_and_flair, parent_sub)
-		else:
+			if sub_rules['karma_breakdown'] == True:
+				analyzeUserKarma(user, karma_stats, small, users_and_flair, parent_sub)
+		elif sub_rules['new'] == True:
 			appendFlair(user, 'New to crypto', users_and_flair)
 		updateDB(user, total_submis, parent_sub)
 
 #sentiment analysis of expired_users
-def analyzeUserHist(user, users_and_flair, parent_sub):
+def analyzeUserHist(user, users_and_flair, parent_sub, sent_rule):
 	username = str(user)
 	#Setup float and int numbers for sentiment analysis
 	sub_counter = Counter()
@@ -208,14 +222,15 @@ def analyzeUserHist(user, users_and_flair, parent_sub):
 		cmnt_sub = comment.subreddit
 		sub_name = str(cmnt_sub).upper()
 		if sub_name in sub_abrev:
-			commentSent = analyzeText(comment.body)
 			count += 1
-			if commentSent < -0.5:
-				countNeg += 1
-				totalNeg += commentSent
-			elif commentSent > 0.6:
-				countPos += 1
-				totalPos += commentSent
+			if sent_rule == True:
+				commentSent = analyzeText(comment.body)
+				if commentSent < -0.5:
+					countNeg += 1
+					totalNeg += commentSent
+				elif commentSent > 0.6:
+					countPos += 1
+					totalPos += commentSent
 			#Count comment's karma in sub
 			abrev = sub_abrev[sub_name]
 			sub_counter[abrev] += comment.score
@@ -230,8 +245,11 @@ def analyzeUserHist(user, users_and_flair, parent_sub):
 			abrev = sub_abrev[sub_name]
 			sub_counter[abrev] += post.score
 	
-	#analyze sentiment statistics
-	flaired = sentFlair(user, count, countPos, countNeg, totalNeg, totalPos, users_and_flair)
+	if sent_rule == True:
+		#analyze sentiment statistics
+		flaired = sentFlair(user, count, countPos, countNeg, totalNeg, totalPos, users_and_flair)
+	else:
+		flaired = False
 	
 	totalPost = postCount + count
 	return [sub_counter, flaired, totalPost]
@@ -329,7 +347,7 @@ def sentFlair(user, count, countPos, countNeg, totalNeg, totalPos, users_and_fla
 
 #Search PM's for new messages with the syntax '!whitelist /u/someuser and add someuser to the whitelist
 def readPMs(parent_sub, whitelist):
-	mods = sub_and_mods[parent_sub]
+	mods = subs_and_mods[parent_sub]
 	
 	messages = reddit.inbox.unread()
 	for message in messages:
@@ -375,12 +393,12 @@ def flairUsers(users_and_flair, parent_sub):
 def updateDB(user, total_submis, parent_sub):
 	username = str(user)
 	flair_time = json_serial(current_time)
-	userDB = TinyDB(sub_and_userDB[parent_sub] + '.json')
+	userDB = TinyDB(subs_and_userDB[parent_sub] + '.json')
 	userDB.insert({'username' : username, 'flair_age' : flair_time, 'submis_count': total_submis})
 
 #Add a username to the whitelistDB
 def addWhitelist(username, parent_sub, whitelist):
-	whitelistDB = TinyDB(sub_and_whitelist[parent_sub] + '.json')
+	whitelistDB = TinyDB(subs_and_whitelist[parent_sub] + '.json')
 	whitelistDB.insert({'username' : username})
 	whitelist.append(username)
 	print (username + ' added to whitelist')
