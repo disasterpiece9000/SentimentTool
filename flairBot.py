@@ -59,6 +59,8 @@ find_stuff = Query()
 #lists of mods
 CMmods = ('_CapR_', 'turtleflax', 'PrinceKael', 'Christi123321', ' publicmodlogs', 'AutoModerator', 'CryptoMarketsMod', 'davidvanbeveren', 'trailblazerwriting', 'golden_china', 'PhantomMod')
 CTmods = ('davidvanbeveren', '_CapR_', 'bLbGoldeN', 'AtHeartEngineer', 'TheRetroguy', 'turtleflax', 'LacticLlama', 'ndha1995', 'Neophyte-', 'AutoModerator', 'CryptoTechnologyMod', 'publicmodlogs')
+CCmods = ('SeasonFinale', 'stardigrada', 'PhantomMod', 'jwinterm', 'crypto_buddha', 'socialcadabra', 'SamsumgGalaxyPlayer', 'INGWR', 'doug3465', 'AdamSC1', '_I_Am_Chaos_', 'PrinceKael', 'wannabelikeme',
+'CryptoMaximalist', 'LargeSnorlax', 'millerb7', 'macktastick', 'CryptoCurrencyMod', 'AutoModerator', 'ccticker', 'publicmodlogs', '_ihavemanynames_', 'Professional-Kiwi', 'CCNewsBot', 'shimmyjimmy97')
 
 #subs and whitelist CSS
 CCcss = ('Trophybronze', 'Trophysilver', 'Trophygold')
@@ -68,14 +70,15 @@ CTcss = ()
 #sub specific rule sets
 CTrules = {'sentiment': True, 'karma_breakdown': True, 'comment_karma': True, 'accnt_age': True, 'new': True}
 CMrules = {'sentiment': True, 'karma_breakdown': True, 'comment_karma': True, 'accnt_age': True, 'new': True}
+CCrules = {'sentiment': True, 'karma_breakdown': True, 'comment_karma': True, 'accnt_age': True, 'new': True}
 
 #sub lists
-subs = ['CryptoMarkets', 'CryptoTechnology']
-subs_and_userDB = {'CryptoMarkets': 'CMuserDB', 'CryptoTechnology': 'CTuserDB'}
-subs_and_whitelist = {'CryptoMarkets': 'CMwhitelist', 'CryptoTechnology': 'CTwhitelist'}
-subs_and_mods = {'CryptoMarkets': CMmods, 'CryptoTechnology': CTmods}
-subs_and_css = {'CryptoMarkets': CMcss, 'CryptoTechnology': CTcss}
-subs_and_rules = {'CryptoMarkets': CMrules, 'CryptoTechnology': CTrules}
+subs = ['CryptoCurrency', 'CryptoMarkets', 'CryptoTechnology']
+subs_and_userDB = {'CryptoCurrency': 'CCuserDB', 'CryptoMarkets': 'CMuserDB', 'CryptoTechnology': 'CTuserDB'}
+subs_and_whitelist = {'CryptoCurrency': 'CCwhitelist', 'CryptoMarkets': 'CMwhitelist', 'CryptoTechnology': 'CTwhitelist'}
+subs_and_mods = {'CryptoCurrency': CCmods, 'CryptoMarkets': CMmods, 'CryptoTechnology': CTmods}
+subs_and_css = {'CryptoCurrency': CCcss, 'CryptoMarkets': CMcss, 'CryptoTechnology': CTcss}
+subs_and_rules = {'CryptoCurrency': CCrules, 'CryptoMarkets': CMrules, 'CryptoTechnology': CTrules}
 
 #read users from databases
 def readUserDB(sub_name):
@@ -304,11 +307,11 @@ def analyzeUserKarma(user, sub_counter, small, users_and_flair, parent_sub):
 	else:
 		#Add flair for sub karma > 1k	
 		for key, value in sub_counter.most_common(2):
-			if value > 500 and key != parent_sub:
+			if value > 500 and key != abrev:
 				hold_flair += ' ' + key + ': ' + str(value) + ' karma'
 		#Add flair for sub karma < -10
 		for key, value in sub_counter.most_common():
-			if value < -10 and key != parent_sub:
+			if value < -10 and key != abrev:
 				hold_flair += ' ' + key + ': ' + str(value) + ' karma'
 		appendFlair(user, hold_flair, users_and_flair)
 
@@ -316,8 +319,8 @@ def analyzeUserKarma(user, sub_counter, small, users_and_flair, parent_sub):
 def sentFlair(user, count, countPos, countNeg, totalNeg, totalPos, users_and_flair):
 	username = str(user)
 	flaired = False
-	#Require at least 15 comments for accurate analysis
-	if count > 15:
+	#Require at least 20 comments for accurate analysis
+	if count > 20 and (countPos + countNeg) > 15:
 		sentPerc = ((countPos + countNeg) / float(count)) * 100
 		#Require at least 7.5% of comments to show obvious sentiment
 		if sentPerc < 7.5:
@@ -385,8 +388,9 @@ def flairUsers(users_and_flair, parent_sub):
 	print ('\nUsers and corresponding flair:\n')
 	for username in users_and_flair:
 		user = setUser(username)
+		user_css = (next(sub.flair(user))['flair_css_class'])
 		flair = users_and_flair[username]
-		sub.flair.set(user, flair)
+		sub.flair.set(user, flair, user_css)
 		print (username + ': ' + flair)
 
 #add users to database with flair
@@ -510,7 +514,7 @@ else:
 		current_users = readUserDB(parent_sub)
 		whitelist = readWhitelistDB(parent_sub)
 		users_and_flair = {}
-		targetName = sys.argv[2]
+		targetName = sys.argv[3]
 		addWhitelist(targetName, parent_sub, whitelist)
 	#clear all users flair in whitelist
 	elif command == 'clear_whitelist':
